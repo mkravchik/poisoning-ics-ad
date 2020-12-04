@@ -10,3 +10,8 @@ Official implementation of "Poisoning Attacks on Cyber Attack Detectors for Indu
  * scikit-image==0.16.2
  * scikit-learn==0.22.1
  * scipy==1.4.1
+
+For running the SWaT tests the code is expecting to have the dataset that can be requested at https://itrust.sutd.edu.sg/itrust-labs_datasets/.
+The dataset train and test files should be subsampled at the 5 seconds rate and saved locally in the files named SWaT_Dataset_Normal_sub5.csv and SWaT_Dataset_Attack_sub5.csv, correspondingly.
+  
+## Usage
