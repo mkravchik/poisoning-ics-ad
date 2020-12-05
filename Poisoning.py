@@ -18,67 +18,11 @@ import copy, random
 import seaborn as sns
 import matplotlib as mpl
 import argparse
+import importlib
+from generators import *
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 data_path = "./"
-
-
-class sin_generator_c(object):
-    def __call__(self, c):
-        periods = c["periods"]
-        period1 = 1  # each second we come back to the original point
-        t = np.linspace(0, periods, c["total_len"])
-        signal_func = c["signal_func"]
-        s = 0.5 * signal_func(2 * np.pi / period1 * t)
-        return s.reshape((c["total_len"], 1)), t
-
-    def apply(self, src, op, _):
-        src = op(src)
-        return src
-
-
-class double_sin_generator_c(object):
-    def __init__(self):
-        self.ops = [lambda x: x * 0.5]
-
-    def __call__(self, c):
-        periods = c["periods"]
-        period1 = 1  # each second we come back to the original point
-        t = np.linspace(0, periods, c["total_len"])
-        src = np.empty((c["total_len"], 2))
-        src[:, 0] = 0.5 * c["signal_func"](2 * np.pi / period1 * t)
-        src[:, 1] = self.ops[0](src[:, 0])
-        return src, t
-
-    def apply(self, src, op, partial=None):
-        # in this simple case we always change the first sine
-        res = src.copy()
-        res[:, 0] = op(res[:, 0])
-        if partial is None:  # else leave it as is
-            res[:, 1] = self.ops[0](res[:, 0])
-        return res
-
-
-class echo_generator_c(object):
-    def __init__(self, src_signal):
-        self.sig = src_signal.copy()
-
-    def __call__(self, c):
-        periods = c["periods"]
-        period1 = 1  # each second we come back to the original point
-        t = np.linspace(0, periods, len(self.sig))
-        return self.sig, t
-
-    def apply(self, src, op, partial=None):
-        if partial is not None:
-            out_cols = np.delete(np.arange(src.shape[-1]), partial)
-            res = np.empty(src.shape)
-            res[:, partial] = op(src[:, partial])
-            res[:, out_cols] = src[:, out_cols]
-            return res
-        else:
-            src = op(src)
-            return src.copy()
 
 
 def model_signal(conf, model_name, src, restore=False):
@@ -1042,88 +986,31 @@ def run_synthetic_test(conf):
     return alerts, poison_points, iterations, time_taken
 
 
-def synthetic_test():
-    conf = dict(
-        adv_lr=0.2,
-        seq_len=2,
-        total_len=100,
-        code_ratio=2,
-        signal_func=np.sin,  # signal.square,#signal.sawtooth#np.sin
-        att_magn=0.5,
-        att_point="SIN_TOP",  # "SIN_BOTTOM",# "SIN_SIDE"
-        att_len=1,
-        window=1,
-        threshold=0.2,
-        layers=1,  # increasing it did not show any significant changes
-        inflate_factor=2,
-        silent=True,
-        batches=1,
-        it_count=30,
-        adv_it_count=40,
-        lr=0.6,
-        train_points=10,
-        max_adv_iter=300,
-        periods=5,
-        randomize=False,
-        optimizer=tf.train.GradientDescentOptimizer(0.6),
-        generator=sin_generator_c(),
-        single_sequence=False,
-        naive=False,
-        find_poison=False,
-        retrain=False,
-        retrain_points=10,
-        max_clean_poison=100,
-        activation=tf.nn.tanh,
-        activate_last=True
-    )
-
+def synthetic_test(conf):
     points_per_period = 500
-    conf["silent"] = False
-    conf["single_sequence"] = False
-    conf["att_len"] = 1
-    conf["layers"] = 1
-    conf["inflate_factor"] = 2
-    conf["randomize"] = True
-    conf["partial_attacked"] = [0]
-    conf["att_start"] = 374  # 605 #TOP
-    conf["att_len"] = 40
-    conf["att_point"] = "CUSTOM_FIXED"  # "SIN_BOTTOM",# "TOP", "SIDE" #TODO - add an attack-generating function
 
     cols = list(conf.keys()) + ['alerts', 'poison_points', 'iterations', 'time']
     df_results = pd.DataFrame(columns=cols)
     sns.set(rc={"font.size": 12, "axes.titlesize": 12, "axes.labelsize": 12, "legend.fontsize": 12}, style="darkgrid")
 
-    for points_per_period in [500]:  # range(20,100,20):
-        for conf["naive"] in [True]:
-            for conf["generator"] in [double_sin_generator_c()]:
-                for conf["att_point"] in ["CUSTOM_FIXED"]:
-                    for conf["train_points"] in [10]:  # range(10, 150, 20):
-                        for conf["seq_len"] in np.arange(22, 52, 10):
-                            for conf["periods"] in [2]:
-                                start_magn = -0.2
-                                if conf["seq_len"] == 22:
-                                    start_magn = -0.1
-                                for conf["att_magn"] in np.arange(start_magn, 0.5, 0.1):
-                                    failed = 0
-                                    for _ in range(5):
-                                        conf["total_len"] = conf["periods"] * points_per_period
-                                        if conf["single_sequence"]:
-                                            conf["seq_len"] = conf["total_len"]
-                                        conf["batches"] = conf["train_points"]
-                                        conf["optimizer"] = tf.train.GradientDescentOptimizer(conf["lr"])
-                                        res = conf.copy()
-                                        res['alerts'], res['poison_points'], res['iterations'], res[
-                                            'time'] = run_synthetic_test(conf)
-                                        df_results = df_results.append(pd.DataFrame([res]), ignore_index=True)
-                                        df_results.to_csv(datetime.datetime.now().strftime(
-                                            data_path + "PoisoningTests_%d_%m_%Y_%H_%M_%S.csv"))
+    failed = 0
+    for _ in range(5):
+        conf["total_len"] = conf["periods"] * points_per_period
+        if conf["single_sequence"]:
+            conf["seq_len"] = conf["total_len"]
+        conf["batches"] = conf["train_points"]
+        conf["optimizer"] = tf.train.GradientDescentOptimizer(conf["lr"])
+        res = conf.copy()
+        res['alerts'], res['poison_points'], res['iterations'], res[
+            'time'] = run_synthetic_test(conf)
+        df_results = df_results.append(pd.DataFrame([res]), ignore_index=True)
+        df_results.to_csv(datetime.datetime.now().strftime(
+            data_path + "PoisoningTests_%d_%m_%Y_%H_%M_%S.csv"))
 
-                                        if res['alerts']:
-                                            failed += 1
-                                            if failed > 2:
-                                                break
-                                    if failed > 2:
-                                        break
+        if res['alerts']:
+            failed += 1
+            if failed > 2:
+                break
 
     df_results.to_csv(datetime.datetime.now().strftime(data_path + "PoisoningTests_%d_%m_%Y_%H_%M_%S.csv"))
 
@@ -1246,7 +1133,7 @@ def run_synthetic_swat_test(conf, x_train_full, extended_att_len):
     x_train = x_train_full[-conf["total_len"]:]
     period_start = conf["period_start"] if "period_start" in conf else 0
     # it will be used for generating a clean validation input
-    conf["generator"] = echo_generator_c(x_train_full[period_start:extended_att_len])
+    conf["generator"] = EchoGenerator(x_train_full[period_start:extended_att_len])
 
     model_signal(conf, model_name, x_train_full)
 
@@ -1269,7 +1156,7 @@ def run_synthetic_swat_test(conf, x_train_full, extended_att_len):
     return alerts, poison_points, iterations, time_taken
 
 
-def syn_swat_test(att_num=None):
+def syn_swat_test(conf, att_num=None):
     X, Y, attacks = read_swat()
     syn_attacks = dict()
     syn_attacks[3] = dict(
@@ -1344,44 +1231,6 @@ def syn_swat_test(att_num=None):
         period_start=300
     )
 
-    conf = dict(
-        adv_lr=0.2,
-        seq_len=2,
-        total_len=50,
-        code_ratio=1.5,
-        signal_func=np.sin,  # signal.square,#signal.sawtooth#np.sin
-        att_magn=0.4,
-        att_point="CUSTOM_FIXED",
-        att_len=1,
-        window=10,
-        threshold=0.2,
-        layers=1,  # increasing it did not show any significant changes
-        inflate_factor=2,
-        silent=False,
-        batches=10,
-        it_count=10,
-        adv_it_count=40,
-        lr=0.6,
-        train_points=10,
-        max_adv_iter=300,
-        periods=5,
-        randomize=True,
-        optimizer=tf.train.GradientDescentOptimizer(0.6),
-        generator=sin_generator_c(),
-        single_sequence=False,
-        naive=True,
-        find_poison=False,
-        retrain=False,
-        retrain_points=10,
-        max_clean_poison=100,
-        activation=tf.nn.tanh,
-        activate_last=True,
-        partial_attacked=[0],
-    )
-    conf["silent"] = False
-    conf["it_count"] = 10
-    conf["seq_len"] = 1
-
     cols = list(conf.keys()) + ['alerts', 'poison_points', 'iterations', 'time']
     df_results = pd.DataFrame(columns=cols)
     if att_num is None:
@@ -1405,25 +1254,22 @@ def syn_swat_test(att_num=None):
 
         x_train_full = X[field_names].values
 
-        for conf["naive"] in [True, False]:
-            for conf["seq_len"] in [2, 10, 20, 30]:
-                failed = 0
-                for _ in range(5):
-                    conf["train_points"] = 5
-                    conf["total_len"] = conf["train_points"] * extended_att_len
-                    res = conf.copy()
-                    res['alerts'], res['poison_points'], res['iterations'], res['time'] = \
-                        run_synthetic_swat_test(conf,
-                                                x_train_full,
-                                                extended_att_len)
-                    df_results = df_results.append(pd.DataFrame([res]), ignore_index=True)
-                    # add to the test results!
-                    timestamp = datetime.datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
-                    df_results.to_csv(data_path + "PoisoningTests_swat_syn_%d_%s.csv" % (at, timestamp))
-                    if res['alerts']:
-                        failed += 1
-                        if failed > 2:
-                            break
+        failed = 0
+        for _ in range(5):
+            conf["total_len"] = conf["train_points"] * extended_att_len
+            res = conf.copy()
+            res['alerts'], res['poison_points'], res['iterations'], res['time'] = \
+                run_synthetic_swat_test(conf,
+                                        x_train_full,
+                                        extended_att_len)
+            df_results = df_results.append(pd.DataFrame([res]), ignore_index=True)
+            # add to the test results!
+            timestamp = datetime.datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
+            df_results.to_csv(data_path + "PoisoningTests_swat_syn_%d_%s.csv" % (at, timestamp))
+            if res['alerts']:
+                failed += 1
+                if failed > 2:
+                    break
 
     timestamp = datetime.datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
     df_results.to_csv(data_path + "PoisoningTests_swat_syn_%s.csv" % timestamp)
@@ -1435,14 +1281,24 @@ if __name__ == '__main__':
                         help="Run training and test for selected data. "
                              "Specify either syn or swat. "
                              "See the synthetic_test and syn_swat_test for multiple test parameters")
+    parser.add_argument("-c", "--configuration", help="A dictionary with test parameters (without .py). "
+                                                      "Defaults to conf_syn or conf_swat correspondingly.")
+
     parser.add_argument("-a", "--attack", type=int, choices=[3, 7, 16, 31, 32, 33, 36],
                         help="SWaT attack to poison")
 
     args = parser.parse_args()
+    conf = None  # will be overwritten in the import
+    if args.configuration is None:
+        args.configuration = "conf_syn" if args.test == 'syn' else "conf_swat"
+
+    # using import so we can reuse the exiting globals and locals
+    conf_mod = importlib.__import__(args.configuration)
+
     if args.test == 'syn':
-        synthetic_test()
+        synthetic_test(conf_mod.conf)
     if args.test == 'swat':
         if args.attack is not None:
-            syn_swat_test(args.attack)
+            syn_swat_test(conf_mod.conf, args.attack)
         else:
-            syn_swat_test()
+            syn_swat_test(conf_mod.conf)
