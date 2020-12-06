@@ -7,7 +7,6 @@ import time, datetime
 import tensorflow as tf
 import collections
 from matplotlib.lines import Line2D
-from matplotlib.lines import Line2D
 from sklearn.metrics import mean_squared_error
 from math import sqrt
 from munch import *
@@ -280,10 +279,6 @@ def generate_poison_and_attack(conf):
     return input_sig.copy(), x_att_full
 
 
-# I want to check training and testing in the original setting, without wrapping
-# I arrived to the conclusion that I need to retrain (?!) despite the waste of time
-# otherwise, especially in the single_sequence setting, the training only with poison skewes the
-# weights towards the attack, and screwes the clean data unrepearably
 def train_and_test_adv(model_name, model_idx, it_count, x_train, complete_poison,
                        x_poison, x_test, c, train_curr_poison=True,
                        display=False, title=""):
@@ -718,7 +713,6 @@ def poison_model_naive(conf, model_name, start_poison, x_att, x_train):
     i = 0
     prev_poison = curr_poison.copy()
     loop = tqdm(range(c.max_adv_iter))
-    #     it_count = c.adv_it_count
     it_count = c.it_count
     smallest_step = 0.001
 
@@ -1111,11 +1105,10 @@ def read_swat():
 #
 # | Attack | Imitation | Notes |
 # | ------ | --------- | ------|
-# | 3 | requires linear increase of LIT101 to 0.824721 | (add new feature) |
+# | 3 | requires linear increase of LIT101 to 0.824721 | |
 # | 7 | LIT301 fixed at 1.309346 | |
-# | 10 | FIT401 fixed at  -23.096798 | The signal is not periodic and AE does not work well with it |
-# | 16 | LIT301 linearly decreases to -1.393334 |  add new feature |
-# | 31 | LIT401 fixed at -1.269128 | It would be good to find a related feature |
+# | 16 | LIT301 linearly decreases to -1.393334 | |
+# | 31 | LIT401 fixed at -1.269128 | |
 # | 32 | LIT301 fixed at 1.313708 | |
 # | 33 | LIT101 fixed at -1.081831 | |
 # | 36 | LIT101 fixed at -1.232907| |
@@ -1292,8 +1285,7 @@ if __name__ == '__main__':
     if args.configuration is None:
         args.configuration = "conf_syn" if args.test == 'syn' else "conf_swat"
 
-    # using import so we can reuse the exiting globals and locals
-    conf_mod = importlib.__import__(args.configuration)
+    conf_mod = importlib.import_module(args.configuration)
 
     if args.test == 'syn':
         synthetic_test(conf_mod.conf)
