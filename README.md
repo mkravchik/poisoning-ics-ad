@@ -25,7 +25,7 @@ python Poisoning.py syn
 
 For training and poisoning using the SWaT data run:
 ```blockquote
-python Poisoning.py swat
+python Poisoning.py swat [-a {3,7,16,31,32,33,36}]
 ```
 
 The are multiple configuration parameters defined in the conf_syn.py and conf_swat.py files. You can tweak them to experiment with different settings.
