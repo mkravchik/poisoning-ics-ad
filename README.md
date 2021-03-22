@@ -1,6 +1,6 @@
 # poisoning-ics-ad
 Official implementation of "Poisoning Attacks on Cyber Attack Detectors for Industrial Control Systems" by Moshe Kravchik, Battista Biggio, and Asaf Shabtai, SAC 2021.
-# UNDER CONSTRUCTION
+
 ## Requirements
  * Python 3.6
  * tensorflow==1.15
@@ -63,5 +63,5 @@ The meaning of the non-standard ones is explained in the article.
 * single_sequence {False|True} - Model the entire signal at ones or as short overlapping sequences.
 * threshold - The attack detection threshold.
 * total_len - Don't set, is overwritten by the code.
-* train_points - The number of training batches for the synthetic data; for the SWaT attacks, controls how long is the singla used for the model's training (measured in the signal's period). 
+* train_points - The number of training batches for the synthetic data; for the SWaT attacks, controls how long is the signal used for the model's training (measured in the signal's period). 
 * window - The attack detection window.
